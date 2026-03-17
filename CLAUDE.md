@@ -58,6 +58,28 @@ Commands: `init`, `store-entity <json>`, `store-relation <json>`, `annotate <jso
 
 DB location: `~/.music-agent/knowledge.db`. Schema in `db/schema.sql`.
 
+### Discogs (Python)
+```
+python3 scripts/lookup/discogs_lookup.py <type> <query|id>
+```
+Types: `artist`, `release`, `credits`, `label`, `label-releases`, `artist-releases`
+
+Requires `python3-discogs-client` (installed by setup). Auth: `DISCOGS_TOKEN` env var or `~/.music-agent/config.json`.
+
+### Graph Engine (Python + networkx)
+```
+python3 scripts/graph/engine.py <command> [args]
+```
+Commands: `shortest-path`, `ego`, `border`, `walk`, `centrality`, `clusters`, `stats`
+
+Powers the Lenses framework: Drift (walk), Six Degrees (shortest-path), Expedition (border).
+
+### Configuration
+```
+python3 scripts/config.py <get|set|show> [key] [value]
+```
+Manages `~/.music-agent/config.json`. Used for API tokens and settings.
+
 ## Plugin Installation
 
 ```bash
@@ -109,6 +131,22 @@ python3 music-agent/scripts/db/db.py search "Autechre"
 
 # SessionStart hook output (what Claude sees on session init)
 bash music-agent/scripts/session_context.sh
+```
+
+```bash
+# Discogs — requires DISCOGS_TOKEN
+python3 music-agent/scripts/lookup/discogs_lookup.py artist "Autechre"
+
+# Graph engine
+python3 music-agent/scripts/graph/engine.py stats
+python3 music-agent/scripts/graph/engine.py centrality 5
+python3 music-agent/scripts/graph/engine.py border auto
+
+# Config
+python3 music-agent/scripts/config.py show
+
+# Tests
+cd music-agent && python3 -m pytest tests/ -v
 ```
 
 All scripts output JSON. Pipe through `jq` for readable output.
