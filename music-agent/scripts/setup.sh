@@ -21,6 +21,8 @@ echo "  ✓ $(python3 --version)"
 echo ""
 echo "→ Installing Python dependencies..."
 pip3 install musicbrainzngs --quiet && echo "  ✓ musicbrainzngs installed" || echo "  ⚠ musicbrainzngs install failed — MusicBrainz lookups won't work"
+pip3 install python3-discogs-client --quiet && echo "  ✓ python3-discogs-client installed" || echo "  ⚠ python3-discogs-client install failed — Discogs lookups won't work"
+pip3 install networkx --quiet && echo "  ✓ networkx installed" || echo "  ⚠ networkx install failed — Graph engine won't work"
 
 # 2. Initialize the knowledge graph database
 echo ""
@@ -34,6 +36,8 @@ echo "→ Setting script permissions..."
 chmod +x "$PLUGIN_DIR"/scripts/apple-music/*.jxa 2>/dev/null || true
 chmod +x "$PLUGIN_DIR"/scripts/lookup/*.py 2>/dev/null || true
 chmod +x "$PLUGIN_DIR"/scripts/db/*.py 2>/dev/null || true
+chmod +x "$PLUGIN_DIR"/scripts/graph/*.py 2>/dev/null || true
+chmod +x "$PLUGIN_DIR"/scripts/config.py 2>/dev/null || true
 echo "  ✓ Permissions set"
 
 # 4. Test Apple Music connection
@@ -63,13 +67,35 @@ else
     echo "  ⚠ MusicBrainz connection failed"
 fi
 
+# 6. Check Discogs configuration
+echo ""
+echo "→ Checking Discogs configuration..."
+DISCOGS_TOKEN="${DISCOGS_TOKEN:-}"
+if [ -z "$DISCOGS_TOKEN" ]; then
+    DISCOGS_TOKEN=$(python3 "$PLUGIN_DIR/scripts/config.py" get discogs_token 2>/dev/null | python3 -c 'import sys,json; v=json.load(sys.stdin).get("value",""); print(v if v and v != "None" else "")' 2>/dev/null || echo "")
+fi
+if [ -z "$DISCOGS_TOKEN" ]; then
+    echo "  ⚠ No Discogs token configured"
+    echo "    Get one at: https://www.discogs.com/settings/developers"
+    echo "    Then run: python3 $PLUGIN_DIR/scripts/config.py set discogs_token YOUR_TOKEN"
+else
+    echo "  ✓ Discogs token configured"
+fi
+
+# 7. Test graph engine
+echo ""
+echo "→ Testing graph engine..."
+GRAPH_RESULT=$(python3 "$PLUGIN_DIR/scripts/graph/engine.py" stats 2>/dev/null || echo '{"error":"failed"}')
+GRAPH_NODES=$(echo "$GRAPH_RESULT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("nodes",0))' 2>/dev/null || echo "0")
+echo "  ✓ Graph engine ready ($GRAPH_NODES nodes in knowledge graph)"
+
 echo ""
 echo "===================="
 echo "✓ Setup complete!"
 echo ""
 echo "Available commands:"
 echo "  /now              — What's playing? Research it."
-echo "  /dig <subject>    — Deep research mode"
+echo "  /dig <subject>    — Deep research (now with Discogs credits)"
 echo "  /queue <seed>     — Build an intelligent queue"
 echo "  /who <artist>     — Explore the credit graph"
 echo "  /taste            — Analyze your library"
@@ -80,4 +106,11 @@ echo "  crate-digger      — Obscure finds, deep cuts, small labels"
 echo "  historian         — Lineage, context, influence chains"
 echo "  harmonic-dj       — Energy arcs, transitions, flow"
 echo "  anti-bubble       — Deliberate filter bubble breaking"
+echo ""
+echo "Graph engine (python3 scripts/graph/engine.py):"
+echo "  shortest-path     — Find credit path between two entities"
+echo "  walk              — Random credit-graph walk"
+echo "  border            — Entities at the edge of your collection"
+echo "  centrality        — Most-connected entities"
+echo "  clusters          — Detect communities/scenes"
 echo ""
