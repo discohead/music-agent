@@ -246,6 +246,33 @@ def get_threads(limit=10):
     return {"count": len(rows), "threads": [dict(r) for r in rows]}
 
 
+def link_discogs(entity_id, discogs_id):
+    """Link a Discogs ID to an existing entity."""
+    conn = get_db()
+    conn.execute("UPDATE entities SET discogs_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                 (discogs_id, entity_id))
+    row = conn.execute("SELECT sources FROM entities WHERE id = ?", (entity_id,)).fetchone()
+    if row:
+        sources = json.loads(row["sources"] or "[]")
+        if "discogs" not in sources:
+            sources.append("discogs")
+            conn.execute("UPDATE entities SET sources = ? WHERE id = ?",
+                         (json.dumps(sources), entity_id))
+    conn.commit()
+    conn.close()
+    return {"linked": entity_id, "discogs_id": discogs_id}
+
+
+def find_by_discogs_id(discogs_id):
+    """Find an entity by its Discogs ID."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM entities WHERE discogs_id = ?", (discogs_id,)).fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+
 def migrate():
     """Apply pending schema migrations."""
     conn = get_db()
@@ -310,6 +337,8 @@ if __name__ == "__main__":
         "start-thread": lambda: start_thread(json.loads(sys.argv[2])),
         "update-thread": lambda: update_thread(json.loads(sys.argv[2])),
         "threads": lambda: get_threads(),
+        "link-discogs": lambda: link_discogs(sys.argv[2], sys.argv[3]),
+        "find-discogs": lambda: find_by_discogs_id(sys.argv[2]) or {"found": False},
         "migrate": lambda: migrate(),
         "stats": lambda: stats(),
     }
