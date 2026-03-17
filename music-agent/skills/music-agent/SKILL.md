@@ -35,6 +35,16 @@ All scripts are relative to `${CLAUDE_PLUGIN_ROOT}` (the music-agent plugin dire
 - `scripts/db/db.py update-thread '<json>'` — Update thread: {id, steps?, findings?}
 - `scripts/db/db.py threads` — List recent research threads
 - `scripts/db/db.py stats` — Database statistics
+
+**Discogs (Python)**: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/discogs_lookup.py <type> <query|id>`
+  - Types: `artist <name>`, `release <discogs-id>`, `credits <discogs-id>`, `label <discogs-id>`, `label-releases <discogs-id> [page]`, `artist-releases <discogs-id> [page]`
+  - Requires DISCOGS_TOKEN env var or ~/.music-agent/config.json
+
+**Graph Engine (Python)**: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/graph/engine.py <command> [args]`
+  - Commands: `shortest-path <id-a> <id-b>`, `ego <id> [depth]`, `border [auto|ids]`, `walk <start> [steps]`, `centrality [top-n]`, `clusters`, `stats`
+  - Powers the Lenses: Drift (walk), Six Degrees (shortest-path), Expedition (border)
+
+**Config**: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/config.py <get|set|show> [key] [value]`
 </tools>
 
 <principles>
@@ -98,4 +108,10 @@ Persona definitions are in `${CLAUDE_PLUGIN_ROOT}/personas/` — read the releva
 3. Identify taste signals, blind spots, dormant favorites
 4. Store taste signals in DB
 5. Present insights and offer directions to explore
+
+**"Connect these" pattern:**
+1. shortest-path via graph engine → display credit chain with entity names and relation types → offer to explore intermediate nodes
+
+**"What's at the edge?" pattern:**
+1. border nodes via graph engine → entities connected to collection but not in it → ranked by connection density → offer to research top candidates
 </workflow_patterns>
