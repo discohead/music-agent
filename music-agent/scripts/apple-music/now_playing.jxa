@@ -1,0 +1,71 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// now_playing.jxa - Get current track with rich metadata
+// Usage: osascript -l JavaScript scripts/apple-music/now_playing.jxa
+//
+// TODO: JXA `loved` property is unreliable for Apple Music streaming tracks —
+//   both getter and setter throw "descriptor type mismatch". Returns null via
+//   safe() wrapper. This affects all scripts that read `loved`. Root cause appears
+//   to be a macOS JXA bridge issue with certain track types (AAC cloud tracks).
+//   Investigate whether this is fixable or if we need an alternative approach
+//   (e.g. reading from the Apple Music Library XML or using `favorited` if available).
+
+function run() {
+  const app = Application('Music');
+  
+  if (app.playerState() === 'stopped') {
+    return JSON.stringify({ status: 'stopped', track: null });
+  }
+  
+  try {
+    const t = app.currentTrack;
+    try { t.name(); } catch (_) {
+      return JSON.stringify({ status: 'stopped', track: null });
+    }
+    // Helper: some properties (e.g. loved) can throw descriptor mismatch errors
+    function safe(fn, fallback) { try { return fn(); } catch(_) { return fallback; } }
+
+    const track = {
+      name: t.name(),
+      artist: t.artist(),
+      albumArtist: t.albumArtist(),
+      album: t.album(),
+      genre: t.genre(),
+      year: t.year(),
+      trackNumber: t.trackNumber(),
+      discNumber: t.discNumber(),
+      duration: t.duration(),
+      playedCount: t.playedCount(),
+      skippedCount: t.skippedCount(),
+      dateAdded: safe(function() { return t.dateAdded() ? t.dateAdded().toISOString() : null; }, null),
+      lastPlayed: safe(function() { return t.playedDate() ? t.playedDate().toISOString() : null; }, null),
+      rating: t.rating(),
+      loved: safe(function() { return t.loved(); }, null),
+      disliked: safe(function() { return t.disliked(); }, false),
+      comment: t.comment(),
+      composer: t.composer(),
+      grouping: t.grouping(),
+      sortArtist: t.sortArtist(),
+      sortAlbum: t.sortAlbum(),
+      kind: safe(function() { return t.kind(); }, null),
+      size: safe(function() { return t.size(); }, null),
+      bitRate: safe(function() { return t.bitRate(); }, null),
+      sampleRate: safe(function() { return t.sampleRate(); }, null),
+      databaseID: t.databaseID(),
+      persistentID: t.persistentID()
+    };
+    
+    const state = {
+      status: app.playerState(),
+      position: app.playerPosition(),
+      volume: app.soundVolume(),
+      shuffleEnabled: app.shuffleEnabled(),
+      songRepeat: app.songRepeat(),
+      track: track
+    };
+    
+    return JSON.stringify(state, null, 2);
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

@@ -1,0 +1,85 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// library_export.jxa - Export full library metadata to JSON
+// Usage: osascript -l JavaScript scripts/apple-music/library_export.jxa [limit]
+// Warning: Large libraries may take a while. Use limit for testing.
+//
+// TODO: Output size concern — 500 tracks produces ~200KB of JSON. When consumed
+//   by an LLM command like /taste, this can use a significant portion of the
+//   context window. Consider adding a "compact" mode that exports only the fields
+//   needed for analysis (name, artist, genre, year, playedCount, rating, duration)
+//   or a summary/aggregation mode that pre-computes genre/era/artist distributions.
+//
+// TODO: `loved` batch call (allTracks.loved()) throws "Can't get object" for the
+//   entire library — the field is null for all tracks in export. This degrades
+//   the /taste "dormant favorites" analysis which relies on loved status.
+//   See now_playing.jxa for details on the underlying JXA limitation.
+//
+// TODO: Export does not include label information — Apple Music tracks don't
+//   expose label via JXA. Label data must come from MusicBrainz cross-referencing.
+
+function run(argv) {
+  const limit = parseInt(argv[0]) || 0; // 0 = all
+  const app = Application('Music');
+  
+  try {
+    const lib = app.libraryPlaylists[0];
+    const allTracks = lib.tracks;
+    const total = allTracks.length;
+    const cap = limit > 0 ? Math.min(total, limit) : total;
+    
+    // Batch property access for performance
+    const names = allTracks.name();
+    const artists = allTracks.artist();
+    const albumArtists = allTracks.albumArtist();
+    const albums = allTracks.album();
+    const genres = allTracks.genre();
+    const years = allTracks.year();
+    const durations = allTracks.duration();
+    const playedCounts = allTracks.playedCount();
+    const skippedCounts = allTracks.skippedCount();
+    const ratings = allTracks.rating();
+    var loveds;
+    try { loveds = allTracks.loved(); } catch(_) { loveds = []; }
+    const comments = allTracks.comment();
+    const composers = allTracks.composer();
+    const datesAdded = allTracks.dateAdded();
+    const datesPlayed = allTracks.playedDate();
+    const persistentIDs = allTracks.persistentID();
+    const databaseIDs = allTracks.databaseID();
+    const groupings = allTracks.grouping();
+    
+    const tracks = [];
+    for (let i = 0; i < cap; i++) {
+      tracks.push({
+        name: names[i],
+        artist: artists[i],
+        albumArtist: albumArtists[i],
+        album: albums[i],
+        genre: genres[i],
+        year: years[i],
+        duration: durations[i],
+        playedCount: playedCounts[i],
+        skippedCount: skippedCounts[i],
+        rating: ratings[i],
+        loved: loveds[i] !== undefined ? loveds[i] : null,
+        comment: comments[i],
+        composer: composers[i],
+        grouping: groupings[i],
+        dateAdded: datesAdded[i] ? datesAdded[i].toISOString() : null,
+        lastPlayed: datesPlayed[i] ? datesPlayed[i].toISOString() : null,
+        persistentID: persistentIDs[i],
+        databaseID: databaseIDs[i]
+      });
+    }
+    
+    return JSON.stringify({
+      exported: new Date().toISOString(),
+      total: total,
+      count: tracks.length,
+      tracks: tracks
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

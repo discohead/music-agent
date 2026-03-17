@@ -1,0 +1,9 @@
+{
+  "name": "music-agent-dev",
+  "plugins": [
+    {
+      "name": "music-agent",
+      "source": "./"
+    }
+  ]
+}

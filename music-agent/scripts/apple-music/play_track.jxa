@@ -1,0 +1,64 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// play_track.jxa - Play a specific track or queue tracks
+// Usage:
+//   osascript -l JavaScript scripts/apple-music/play_track.jxa play <databaseID>
+//   osascript -l JavaScript scripts/apple-music/play_track.jxa queue <databaseID>
+//   osascript -l JavaScript scripts/apple-music/play_track.jxa play-playlist <name>
+//
+// TODO: `queue` action (add to Up Next) is NOT supported by Apple Music's JXA API.
+//   There is no addToQueue, playNext, or equivalent method. The workaround is to
+//   build a playlist via playlists.jxa and play it. Consider implementing an
+//   auto-generated temporary playlist approach: create "music-agent Queue", add tracks,
+//   then play it. This would simulate queueing behavior end-to-end.
+
+function run(argv) {
+  const action = argv[0];
+  const arg = argv.slice(1).join(' ');
+  const app = Application('Music');
+  
+  try {
+    switch (action) {
+      case 'play': {
+        var dbId = parseInt(arg);
+        if (isNaN(dbId)) return JSON.stringify({ error: 'play requires a numeric databaseID' });
+        var matches = app.libraryPlaylists[0].tracks.whose({ databaseID: dbId });
+        if (!matches.length) return JSON.stringify({ error: 'Track not found with databaseID: ' + dbId });
+        var track = matches[0];
+        app.play(track);
+        return JSON.stringify({
+          action: 'playing',
+          track: track.name(),
+          artist: track.artist(),
+          album: track.album()
+        });
+      }
+      
+      case 'queue': {
+        // Apple Music JXA has no "add to Up Next" API.
+        // Workaround: create/append to a temporary playlist, then play it.
+        return JSON.stringify({
+          error: 'Queue (Up Next) is not supported by Apple Music scripting. Use play-playlist with playlists.jxa to build and play ordered track lists.'
+        });
+      }
+
+      case 'play-playlist': {
+        if (!arg) return JSON.stringify({ error: 'play-playlist requires a playlist name' });
+        var plMatches = app.userPlaylists.whose({ name: arg });
+        if (!plMatches.length) return JSON.stringify({ error: 'Playlist not found: ' + arg });
+        var pl = plMatches[0];
+        app.play(pl);
+        return JSON.stringify({
+          action: 'playing-playlist',
+          playlist: arg,
+          trackCount: pl.tracks().length
+        });
+      }
+
+      default:
+        return JSON.stringify({ error: 'Unknown action. Use: play <databaseID>, queue <databaseID>, play-playlist <name>' });
+    }
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

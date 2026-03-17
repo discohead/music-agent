@@ -1,0 +1,106 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// playlists.jxa - Playlist management for Apple Music
+// Usage: osascript -l JavaScript scripts/apple-music/playlists.jxa <action> [args]
+// Actions: list, get <name>, create <name>, add <playlist> <trackID>, tracks <name>
+//
+// TODO: `list` calls p.tracks().length and p.duration() for every playlist, which
+//   requires Apple Music to enumerate each playlist's contents. On libraries with
+//   many playlists (285+ observed) this can be slow. Consider a lightweight list
+//   mode that omits trackCount/duration, or use batch property access.
+//
+// TODO: No `delete` action for playlists. Would need `app.delete(playlist)`.
+//   Not critical but would be useful for cleanup of agent-generated playlists.
+//
+// TODO: No `remove` action to remove a track from a playlist.
+//
+// TODO: `loved` property unreliable — returns null for streaming tracks.
+//   See now_playing.jxa for details.
+
+function run(argv) {
+  const action = argv[0];
+  const app = Application('Music');
+  
+  try {
+    switch (action) {
+      case 'list': {
+        const playlists = app.userPlaylists();
+        const result = playlists.map(p => ({
+          name: p.name(),
+          trackCount: p.tracks().length,
+          duration: p.duration(),
+          description: p.description() || '',
+          persistentID: p.persistentID()
+        }));
+        return JSON.stringify({ count: result.length, playlists: result }, null, 2);
+      }
+      
+      case 'get':
+      case 'tracks': {
+        var tName = argv[1];
+        if (!tName) return JSON.stringify({ error: 'Playlist name required' });
+        var tMatches = app.userPlaylists.whose({ name: tName });
+        if (!tMatches.length) return JSON.stringify({ error: 'Playlist not found: ' + tName });
+        var tPl = tMatches[0];
+        function safe(fn, fallback) { try { return fn(); } catch(_) { return fallback; } }
+        var tTracks = tPl.tracks().map(function(t) {
+          return {
+            name: t.name(),
+            artist: t.artist(),
+            album: t.album(),
+            duration: t.duration(),
+            playedCount: t.playedCount(),
+            loved: safe(function() { return t.loved(); }, null),
+            databaseID: t.databaseID(),
+            persistentID: t.persistentID()
+          };
+        });
+        return JSON.stringify({
+          playlist: tName,
+          count: tTracks.length,
+          tracks: tTracks
+        }, null, 2);
+      }
+      
+      case 'create': {
+        const newName = argv[1];
+        if (!newName) return JSON.stringify({ error: 'Playlist name required' });
+        const desc = argv[2] || '';
+        const p = app.make({
+          new: 'playlist',
+          withProperties: { name: newName, description: desc }
+        });
+        return JSON.stringify({
+          action: 'created',
+          name: p.name(),
+          persistentID: p.persistentID()
+        });
+      }
+      
+      case 'add': {
+        var aPlName = argv[1];
+        var aTrackID = argv[2];
+        if (!aPlName || !aTrackID) return JSON.stringify({ error: 'Usage: add <playlist> <databaseID>' });
+        var aDbId = parseInt(aTrackID);
+        if (isNaN(aDbId)) return JSON.stringify({ error: 'databaseID must be numeric' });
+        var aPlMatches = app.userPlaylists.whose({ name: aPlName });
+        if (!aPlMatches.length) return JSON.stringify({ error: 'Playlist not found: ' + aPlName });
+        var aPlaylist = aPlMatches[0];
+        var aTrMatches = app.libraryPlaylists[0].tracks.whose({ databaseID: aDbId });
+        if (!aTrMatches.length) return JSON.stringify({ error: 'Track not found with databaseID: ' + aDbId });
+        var aTrack = aTrMatches[0];
+        app.duplicate(aTrack, { to: aPlaylist });
+        return JSON.stringify({
+          action: 'added',
+          track: aTrack.name(),
+          playlist: aPlName
+        });
+      }
+      
+      default:
+        return JSON.stringify({ error: 'Unknown action. Use: list, get, create, add, tracks' });
+    }
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

@@ -1,0 +1,122 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// annotate.jxa - Write metadata to tracks (comments, ratings, loved)
+// Usage: osascript -l JavaScript scripts/apple-music/annotate.jxa <action> <databaseID> [value]
+// Actions:
+//   comment <id> <text>        - Set comment field (agent annotations go here)
+//   append-comment <id> <text> - Append to existing comment
+//   love <id>                  - Toggle loved status
+//   rate <id> <0-100>          - Set star rating (0,20,40,60,80,100)
+//   tag <id> <tag>             - Add a #tag to the comment field
+//
+// TODO: `love` action fails for Apple Music streaming tracks — both reading and
+//   writing the `loved` property throw "descriptor type mismatch" in JXA. Currently
+//   returns a clear error message. See now_playing.jxa for details.
+//
+// TODO: `comment` overwrites the entire field. If multiple agents or manual
+//   annotations coexist, a structured format (e.g. JSON in comment, or delimited
+//   sections) would prevent accidental data loss. Currently `append-comment` and
+//   `tag` are the safer options.
+//
+// TODO: No `untag` action to remove a specific tag from the comment field.
+//   Would need to parse the comment, remove the tag, and rewrite.
+
+function run(argv) {
+  const action = argv[0];
+  const dbID = parseInt(argv[1]);
+  const value = argv.slice(2).join(' ');
+  const app = Application('Music');
+  
+  if (!action || isNaN(dbID)) {
+    return JSON.stringify({ error: 'Usage: annotate.jxa <action> <databaseID> [value]' });
+  }
+
+  try {
+    var matches = app.libraryPlaylists[0].tracks.whose({ databaseID: dbID });
+    if (!matches.length) return JSON.stringify({ error: 'Track not found with databaseID: ' + dbID });
+    var track = matches[0];
+    
+    switch (action) {
+      case 'comment': {
+        track.comment = value;
+        return JSON.stringify({
+          action: 'comment-set',
+          track: track.name(),
+          comment: value
+        });
+      }
+      
+      case 'append-comment': {
+        var existing = track.comment() || '';
+        var sep = existing ? '\n' : '';
+        var newComment = existing + sep + value;
+        track.comment = newComment;
+        return JSON.stringify({
+          action: 'comment-appended',
+          track: track.name(),
+          comment: newComment
+        });
+      }
+      
+      case 'love': {
+        var current;
+        try { current = track.loved(); } catch(_) { current = false; }
+        try {
+          track.loved = !current;
+        } catch(_) {
+          return JSON.stringify({
+            error: 'Cannot set loved status for this track type (JXA limitation with some Apple Music tracks)',
+            track: track.name()
+          });
+        }
+        return JSON.stringify({
+          action: 'love-toggled',
+          track: track.name(),
+          loved: !current
+        });
+      }
+      
+      case 'rate': {
+        var rating = parseInt(value);
+        if (isNaN(rating) || rating < 0 || rating > 100 || rating % 20 !== 0) {
+          return JSON.stringify({ error: 'Rating must be 0, 20, 40, 60, 80, or 100' });
+        }
+        track.rating = rating;
+        return JSON.stringify({
+          action: 'rating-set',
+          track: track.name(),
+          rating: rating,
+          stars: rating / 20
+        });
+      }
+      
+      case 'tag': {
+        var tag = value.startsWith('#') ? value : '#' + value;
+        var existing = track.comment() || '';
+        // Don't add duplicate tags — match as whole word to avoid #rock matching #rockabilly
+        var tagPattern = new RegExp('(^|\\s)' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
+        if (tagPattern.test(existing)) {
+          return JSON.stringify({
+            action: 'tag-exists',
+            track: track.name(),
+            tag: tag,
+            comment: existing
+          });
+        }
+        const sep = existing ? ' ' : '';
+        track.comment = existing + sep + tag;
+        return JSON.stringify({
+          action: 'tag-added',
+          track: track.name(),
+          tag: tag,
+          comment: track.comment()
+        });
+      }
+      
+      default:
+        return JSON.stringify({ error: 'Unknown action. Use: comment, append-comment, love, rate, tag' });
+    }
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

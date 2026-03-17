@@ -1,0 +1,79 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// playback.jxa - Control Apple Music playback
+// Usage: osascript -l JavaScript scripts/apple-music/playback.jxa <action> [args]
+// Actions: play, pause, toggle, next, prev, seek <seconds>, volume <0-100>, shuffle, status
+//
+// TODO: `shuffle` is toggle-only — no way to explicitly set on or off.
+//   Could add `shuffle on` / `shuffle off` by reading current state first,
+//   but JXA's shuffleEnabled setter is toggle-based.
+//
+// TODO: `seek` does not validate against track duration — seeking past the end
+//   is silently handled by Apple Music (jumps to next track). Consider reading
+//   current track duration and clamping.
+
+function run(argv) {
+  const action = argv[0];
+  const arg = argv[1];
+  const app = Application('Music');
+  
+  try {
+    switch (action) {
+      case 'play':
+        app.play();
+        return JSON.stringify({ action: 'play', status: 'ok' });
+      
+      case 'pause':
+        app.pause();
+        return JSON.stringify({ action: 'pause', status: 'ok' });
+      
+      case 'toggle':
+        app.playpause();
+        return JSON.stringify({ action: 'toggle', status: app.playerState() });
+      
+      case 'next':
+        app.nextTrack();
+        return JSON.stringify({ action: 'next', status: 'ok' });
+      
+      case 'prev':
+        app.previousTrack();
+        return JSON.stringify({ action: 'prev', status: 'ok' });
+      
+      case 'seek':
+        if (arg) {
+          var pos = parseFloat(arg);
+          if (isNaN(pos)) return JSON.stringify({ error: 'seek requires a numeric position in seconds' });
+          if (pos < 0) pos = 0;
+          app.playerPosition = pos;
+        }
+        return JSON.stringify({ action: 'seek', position: app.playerPosition() });
+
+      case 'volume':
+        if (arg) {
+          var vol = parseInt(arg);
+          if (isNaN(vol)) return JSON.stringify({ error: 'volume requires a number 0-100' });
+          if (vol < 0) vol = 0;
+          if (vol > 100) vol = 100;
+          app.soundVolume = vol;
+        }
+        return JSON.stringify({ action: 'volume', volume: app.soundVolume() });
+      
+      case 'shuffle':
+        app.shuffleEnabled = !app.shuffleEnabled();
+        return JSON.stringify({ action: 'shuffle', enabled: app.shuffleEnabled() });
+      
+      case 'status':
+        return JSON.stringify({
+          state: app.playerState(),
+          position: app.playerPosition(),
+          volume: app.soundVolume(),
+          shuffle: app.shuffleEnabled()
+        });
+      
+      default:
+        return JSON.stringify({ error: 'Unknown action: ' + (action || '(none)') + '. Use: play, pause, toggle, next, prev, seek, volume, shuffle, status' });
+    }
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

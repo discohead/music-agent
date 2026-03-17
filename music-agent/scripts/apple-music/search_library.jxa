@@ -1,0 +1,83 @@
+#!/usr/bin/env osascript -l JavaScript
+
+// search_library.jxa - Search local Apple Music library
+// Usage: osascript -l JavaScript scripts/apple-music/search_library.jxa "query" [field] [limit]
+// Fields: all (default), name, artist, album, genre, comment
+//
+// TODO: Search uses Apple Music's lib.search() which is a broad full-text match,
+//   then post-filters by field. This means a query like "Electronic" with field "genre"
+//   first finds ALL tracks mentioning "Electronic" anywhere, then filters to genre.
+//   For large libraries this could be slow. Consider whether JXA's `whose()` with
+//   direct property matching would be more efficient for specific fields.
+//
+// TODO: `loved` property unreliable — returns null for many Apple Music streaming
+//   tracks due to JXA descriptor mismatch. See now_playing.jxa for details.
+
+function run(argv) {
+  const query = argv[0];
+  const field = argv[1] || 'all';
+  const limit = parseInt(argv[2]) || 50;
+  
+  if (!query) {
+    return JSON.stringify({ error: 'Usage: search_library.jxa "query" [field] [limit]' });
+  }
+  
+  const app = Application('Music');
+  let tracks = [];
+  
+  try {
+    const lib = app.libraryPlaylists[0];
+    let results;
+    
+    // Always search all tracks — field-specific filtering is done post-search
+    // since JXA's `only: 'artists'` returns artist objects, not tracks
+    results = lib.search({ for: query });
+
+    if (results && field !== 'all') {
+      const q = query.toLowerCase();
+      results = results.filter(function(t) {
+        try {
+          if (field === 'name') return t.name().toLowerCase().indexOf(q) !== -1;
+          if (field === 'artist') return t.artist().toLowerCase().indexOf(q) !== -1;
+          if (field === 'album') return t.album().toLowerCase().indexOf(q) !== -1;
+          if (field === 'genre') return t.genre().toLowerCase().indexOf(q) !== -1;
+          if (field === 'comment') return (t.comment() || '').toLowerCase().indexOf(q) !== -1;
+        } catch (_) { return false; }
+        return false;
+      });
+    }
+    
+    function safe(fn, fallback) { try { return fn(); } catch(_) { return fallback; } }
+
+    if (results && results.length > 0) {
+      const cap = Math.min(results.length, limit);
+      for (let i = 0; i < cap; i++) {
+        const t = results[i];
+        tracks.push({
+          name: t.name(),
+          artist: t.artist(),
+          album: t.album(),
+          genre: t.genre(),
+          year: t.year(),
+          playedCount: t.playedCount(),
+          loved: safe(function() { return t.loved(); }, null),
+          rating: t.rating(),
+          duration: t.duration(),
+          comment: t.comment(),
+          persistentID: t.persistentID(),
+          databaseID: t.databaseID()
+        });
+      }
+    }
+    
+    return JSON.stringify({
+      query: query,
+      field: field,
+      count: tracks.length,
+      totalMatches: results ? results.length : 0,
+      tracks: tracks
+    }, null, 2);
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
