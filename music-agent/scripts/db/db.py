@@ -246,6 +246,22 @@ def get_threads(limit=10):
     return {"count": len(rows), "threads": [dict(r) for r in rows]}
 
 
+def migrate():
+    """Apply pending schema migrations."""
+    conn = get_db()
+    migrations_dir = SCHEMA_PATH.parent
+    applied = []
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(entities)").fetchall()]
+    if "discogs_id" not in cols:
+        migration_path = migrations_dir / "migration_001_discogs.sql"
+        if migration_path.exists():
+            with open(migration_path) as f:
+                conn.executescript(f.read())
+            applied.append("001_discogs")
+    conn.close()
+    return {"applied": applied, "status": "up to date" if not applied else "migrations applied"}
+
+
 def stats():
     # TODO: The bare `except Exception` below silently returns 0 if a table doesn't
     # exist (e.g. after schema change). This masks schema drift. Consider checking
@@ -294,6 +310,7 @@ if __name__ == "__main__":
         "start-thread": lambda: start_thread(json.loads(sys.argv[2])),
         "update-thread": lambda: update_thread(json.loads(sys.argv[2])),
         "threads": lambda: get_threads(),
+        "migrate": lambda: migrate(),
         "stats": lambda: stats(),
     }
     

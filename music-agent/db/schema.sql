@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS entities (
     metadata JSON,                    -- source-specific structured data
     sources JSON,                     -- which APIs contributed: ["musicbrainz", "discogs", "library"]
     apple_music_id TEXT,              -- persistentID from Apple Music library if matched
+    discogs_id TEXT,                  -- Discogs artist/release/label ID
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS entities (
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
 CREATE INDEX IF NOT EXISTS idx_entities_apple ON entities(apple_music_id);
+CREATE INDEX IF NOT EXISTS idx_entities_discogs ON entities(discogs_id);
 
 -- Relationships (the graph edges)
 CREATE TABLE IF NOT EXISTS relations (
