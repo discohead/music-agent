@@ -19,6 +19,16 @@ Parse $ARGUMENTS for an optional --persona flag to activate a specific research 
    - Get their MBID, then discography: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py discography "<mbid>"`
    - For releases with credits: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py credits "<release-mbid>"`
    - For labels: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py label "<name>"`
+4b. If Discogs is configured, enrich with Discogs credits:
+   - Search Discogs: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/discogs_lookup.py artist "<name>"`
+   - Link Discogs ID: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py link-discogs "<mbid>" "<discogs-id>"`
+   - Get full credits: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/discogs_lookup.py credits <discogs-release-id>`
+   - Discogs credits include roles MusicBrainz may lack: remix, sleeve design, A&R, liner notes
+   - Store all new entities and credit relations in the knowledge graph
+4c. Use the graph engine to surface connections:
+   - Centrality: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/graph/engine.py centrality 5`
+   - Border: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/graph/engine.py border auto`
+   - Path: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/graph/engine.py shortest-path <id-a> <id-b>`
 5. Cross-reference with user's library: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/search_library.jxa "<subject>"`
 6. Follow interesting threads — credits lead to collaborators, labels lead to rosters, genres lead to scenes
 7. Store all discovered entities and relations in the knowledge graph
@@ -33,4 +43,6 @@ Parse $ARGUMENTS for an optional --persona flag to activate a specific research 
 - Credit graph explored at least one level deep (who worked on this → what else did they work on)
 - Actionable next steps offered
 - If persona active, research strategy reflects that perspective
+- Discogs credits incorporated when available (producers, engineers, remix credits, sleeve design)
+- Graph engine used to surface non-obvious connections
 </success_criteria>
