@@ -34,7 +34,7 @@ music-agent/
 ├── skills/             # Core orchestration skill
 ├── hooks/              # Session start context injection
 ├── scripts/
-│   ├── apple-music/    # JXA scripts for library access + playback control
+│   ├── apple-music-jxa-v0/  # Archived v0 JXA scripts (replaced by aux CLI)
 │   ├── lookup/         # MusicBrainz Python lookups
 │   └── db/             # Knowledge graph SQLite operations
 └── db/                 # Schema definition
@@ -44,7 +44,7 @@ music-agent/
 
 | Source | Access Method | What It Provides |
 |--------|--------------|------------------|
-| **Apple Music Library** | JXA/osascript | Tracks, playlists, play counts, ratings, loved status, comments, playback control |
+| **Apple Music Library** | aux CLI (MusicKit + REST + AppleScript) | Tracks, playlists, play counts, ratings, loved status, comments, playback control, catalog search, recommendations, charts, queue management |
 | **MusicBrainz** | Python API | Artist metadata, discographies, release credits, label info, recording data |
 | **Knowledge Graph** | SQLite | Accumulated entities, relations, annotations, sessions, taste signals |
 
@@ -64,8 +64,8 @@ The comment field on Apple Music tracks doubles as an in-library annotation laye
 
 ### Prerequisites
 
-- macOS (required for Apple Music JXA access)
-- Apple Music app installed and running
+- macOS with Apple Music app installed and running
+- `aux` CLI v1.1.0+ (the Apple Music bridge — install from the aux project)
 - Python 3.7+ with pip
 - Claude Code
 - `jq` (install via `brew install jq` if not present)

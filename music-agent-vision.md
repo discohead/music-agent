@@ -2,23 +2,28 @@
 
 **An Agentic Music Companion for Apple Music + Claude Code**
 
-*Project Vision Document — March 15, 2026*
+*Project Vision Document — March 17, 2026*
 
 ---
 
 ## Origin
 
-This project began with a simple question: does Apple provide a Swift framework for Apple Music APIs? (Yes — MusicKit, introduced at WWDC 2021.) And does Spotify? (Sort of — an Objective-C iOS SDK that acts as a remote control for the Spotify app, with a REST API for everything else.)
+This project grew out of two conversations that happened back-to-back over 48 hours.
 
-But the real question underneath was bigger: **what if a terminal-based coding agent like Claude Code could become an agentic DJ, curator, collector, archivist, and researcher?** What if there were a Claude Code Apple Music Extension — analogous to VS Code extensions — that turned the terminal into a music research lab, crate-digging station, and intelligent playlist composer?
+The first, on March 16, started with a research question — does Apple provide a Swift framework for Apple Music APIs? — and escalated into a full engineering effort: design and implement **Aux**, a pure-Swift macOS application and CLI that exposes 100% of Apple's MusicKit framework as structured JSON over stdio for terminal coding agents. That conversation produced an 858-line design document, a 3,341-line YAML API spec defining 88 commands, and then a complete TDD implementation — 24 phases, 466 tests (444 passing, 22 disabled integration tests), 7 live service implementations, a SwiftUI auth GUI, and a working `aux` binary. Aux was built in a single session following strict red-green-refactor discipline.
+
+The second conversation, on March 17, asked the deeper question: now that we have a programmatic bridge to Apple Music, **what would an agentic music companion actually look like?** Not just a CLI — a system with curatorial intelligence, music research capabilities, a persistent knowledge graph, and specialized personas that implement different discovery strategies. That conversation produced **music-agent**, a Claude Code plugin (27 files, ~1800 lines) with slash commands, subagents, persona definitions, JXA scripts, MusicBrainz integration, and a SQLite knowledge graph.
+
+Together, Aux provides the *infrastructure* — the reliable, tested, type-safe bridge to Apple Music — and music-agent provides the *intelligence* — the curatorial layer, personas, knowledge accumulation, and conversational interface.
 
 The idea crystallized through a series of escalating realizations:
 
-1. The APIs exist. MusicKit gives you catalog search, library access, playlist CRUD, and playback control. MusicBrainz gives you deep credits, discographies, and label data. Discogs, Bandcamp, and others fill in the gaps.
-2. On macOS, Apple Music is one of the most scriptable apps on the platform. JXA (JavaScript for Automation) can access *everything* — play counts, skip counts, date added, star ratings, loved/disliked state, the comment field, full playback control — data that no API exposes.
-3. A Claude Code plugin is just text files, prompts, and scripts. No server, no build step, no API keys for local library access. The agent *is* the interface.
-4. The comment field on every Apple Music track is an unused metadata layer that the agent can write to. Agent knowledge embeds directly into the library itself.
-5. A local SQLite knowledge graph accumulates everything the agent discovers. The system gets smarter with every interaction without any explicit training.
+1. The APIs exist. MusicKit gives you catalog search, library access, playlist CRUD, playback control, recommendations, and charts. But no single Apple API covers all functionality — MusicKit, the REST API, and Music.app's AppleScript interface each expose unique capabilities.
+2. Aux solves this with a three-layer architecture: MusicKit framework for catalog and type-safe library reads, REST API via `MusicDataRequest` for library writes, and an AppleScript bridge for playback, metadata writing, artwork, file import, AirPlay, EQ, and play statistics. One CLI, three backends, unified JSON output.
+3. On top of this infrastructure, MusicBrainz provides deep credits, discographies, and label data. Discogs, Bandcamp, and others fill in remaining gaps.
+4. A Claude Code plugin is just text files, prompts, and scripts. The agent *is* the interface. No separate UI to build.
+5. The comment field on every Apple Music track is an unused metadata layer the agent can write to. Agent knowledge embeds directly into the library itself.
+6. A local SQLite knowledge graph accumulates everything the agent discovers. The system gets smarter with every interaction without any explicit training.
 
 What emerged is not a music player and not a recommendation engine. It's something that doesn't exist yet: **a music collection as a knowledge graph you can converse with.**
 
@@ -66,7 +71,7 @@ This is the killer feature nobody has built well. The music industry runs on inv
 
 ### The Comment Field as Annotation Layer
 
-Every track in Apple Music has a `comment` field that almost nobody uses. The agent can write structured annotations directly into it — tags like `#deep-cut`, `#microsound`, `#crate-dig-find`, or richer JSON metadata. This means agent knowledge gets embedded *into the library itself*, survives across sessions without any external database, syncs across devices via iCloud, and is searchable via JXA. It's a free, persistent metadata layer.
+Every track in Apple Music has a `comment` field that almost nobody uses. The agent can write structured annotations directly into it — tags like `#deep-cut`, `#microsound`, `#crate-dig-find`, or richer JSON metadata. This means agent knowledge gets embedded *into the library itself*, survives across sessions without any external database, syncs across devices via iCloud, and is searchable via both Aux and JXA. It's a free, persistent metadata layer.
 
 ### Taste Archaeology
 
@@ -84,62 +89,97 @@ Beyond the obvious research, curation, and playlist building:
 
 **Release monitoring with taste-aware filtering.** Not "new releases in electronic" (thousands per week) but "new releases that share at least two attributes with things I've favorited in the last 6 months, weighted toward small labels I've shown affinity for." A personal A&R agent.
 
-**Taste archaeology.** Querying your own history for self-understanding. Identifying dormant interests, binge periods, abandoned explorations.
-
 **Session memory.** "What was that playlist I was vibing with last month that started really ambient?" becomes a real query because sessions are logged objects in the knowledge graph.
 
 ---
 
 ## Architecture
 
-### Design Decision: Plugin-First, Not MCP-First
+### Aux: The Foundation Layer
 
-The v0 deliberately omits the complexity of MCP servers in favor of the simplest possible architecture: a Claude Code plugin composed entirely of text files, prompts, and scripts. This gets shockingly far because:
+Aux is a completed, tested macOS application and CLI that bridges Apple Music to structured JSON over stdio. It exists because no single Apple API covers all of Apple Music's functionality, so Aux unifies three backends behind one interface.
 
-- JXA gives deeper access to Apple Music than MusicKit in many ways (play counts, skip counts, date added, star ratings, comments, full playback control, no auth tokens, no network calls)
-- Python scripts wrap MusicBrainz cleanly with zero infrastructure
-- SQLite needs no server and Claude Code can query it directly via bash
-- The plugin system provides commands, skills, subagents, hooks, and personas with no custom UI to build
-- Claude Code *is* the CLI — the agent interface is already built
+**Three-layer service architecture:**
 
-MCP servers are the natural v1 evolution when the tools need to be consumed by clients other than Claude Code, or when real-time streaming updates become important.
+| Layer | Technology | What It Provides |
+|-------|-----------|-----------------|
+| **MusicKit framework** | Native Swift | Catalog search, library reads, auth, recommendations, charts (type-safe, automatic tokens) |
+| **REST API** | `MusicDataRequest` | Library writes — create playlists, add to library, ratings — because `MusicLibrary.shared.add()` is `@available(macOS, unavailable)` |
+| **AppleScript bridge** | `NSAppleScript` → Music.app | Playback control, metadata writing, artwork, file import, track deletion, AirPlay, EQ, play stats (capabilities that exist nowhere else) |
 
-### Stack
+**Build and test status (as of March 16, 2026):**
+
+| Metric | Value |
+|--------|-------|
+| Implementation phases | 24/24 complete |
+| Total tests | 466 (444 passing, 22 disabled integration) |
+| Leaf commands | 88 across 9 groups |
+| Command groups | auth, search, catalog, library, playback, recommendations, recently-played, ratings, api |
+| Live service implementations | 7 (auth, catalog, library, REST, AppleScript, recommendations, recently-played) |
+| DTO types | 19 with explicit snake_case CodingKeys |
+| Exit codes | 9 (success through unavailable) |
+
+**Key architectural patterns:**
+
+- **Handler/Command split**: Every CLI command has a Handler (in AuxKit, testable with mocks) and a Command (in auxCLI, thin ArgumentParser wrapper). Tests target handlers, not commands.
+- **Protocol-based DI**: Seven service protocols with mock implementations. `ServiceContainer` holds all services; `.mock()` returns test doubles.
+- **Output envelope**: All output goes through `OutputEnvelope<T>` (success with optional `PaginationMeta`) or `CLIErrorResponse`. JSON to stdout, diagnostics to stderr.
+- **VS Code app pattern**: Aux.app is a macOS bundle that handles MusicKit auth via SwiftUI GUI; the `aux` CLI binary is symlinked to `/usr/local/bin/aux` from the app's preferences. GUI for auth, CLI for everything else.
+
+### music-agent: The Intelligence Layer
+
+The Claude Code plugin that provides curatorial intelligence, research capabilities, personas, and the knowledge graph on top of Aux's infrastructure.
+
+**Plugin structure:**
+
+```
+music-agent/
+├── commands/           # /now, /dig, /queue, /who, /taste, /kb
+├── agents/             # crate-digger, historian subagents
+├── personas/           # 4 curatorial perspectives with search strategies
+├── skills/             # Core orchestration skill
+├── hooks/              # Session-start context injection
+├── scripts/
+│   ├── apple-music/    # JXA scripts (v0) — to be replaced by aux calls (v1)
+│   ├── lookup/         # MusicBrainz Python lookups
+│   └── db/             # Knowledge graph SQLite operations
+└── db/                 # Schema definition
+```
+
+### Full Stack
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              Claude Code Plugin                  │
+│         Claude Code Plugin: music-agent          │
 ├──────────────────┬──────────────────────────────┤
-│   Commands       │   Personas                   │
+│   Commands       │   Personas & Subagents       │
 │   /now           │   crate-digger               │
 │   /dig           │   historian                  │
 │   /queue         │   harmonic-dj                │
 │   /who           │   anti-bubble                │
 │   /taste         │                              │
-│   /kb            │   Subagents                  │
-│                  │   crate-digger agent          │
-│   Skills         │   historian agent             │
-│   music-agent    │                              │
-│                  │   Hooks                      │
+│   /kb            │   Hooks                      │
 │                  │   session-start context       │
 ├──────────────────┴──────────────────────────────┤
-│              Scripts Layer                        │
-│  ┌────────────┬──────────────┬────────────────┐ │
-│  │ JXA/osascript │  Python     │    SQLite     │ │
-│  │ now_playing   │  musicbrainz│    db.py      │ │
-│  │ search_library│  _lookup    │    schema.sql │ │
-│  │ playback      │             │               │ │
-│  │ playlists     │             │               │ │
-│  │ library_export│             │               │ │
-│  │ annotate      │             │               │ │
-│  │ play_track    │             │               │ │
-│  └────────────┴──────────────┴────────────────┘ │
+│              Scripts & Tools                      │
+│  ┌──────────────┬──────────────┬──────────────┐ │
+│  │ aux CLI      │  Python      │  SQLite      │ │
+│  │ (88 commands)│  musicbrainz │  knowledge   │ │
+│  │ 3-layer arch │  _lookup     │  graph       │ │
+│  │ MusicKit +   │              │  db.py       │ │
+│  │ REST API +   │              │              │ │
+│  │ AppleScript  │              │              │ │
+│  └──────────────┴──────────────┴──────────────┘ │
+│  ┌──────────────────────────────────────────────┐│
+│  │  JXA scripts (v0 fallback / supplemental)    ││
+│  └──────────────────────────────────────────────┘│
 ├─────────────────────────────────────────────────┤
 │              Data Layer                          │
 │  ┌──────────────────┐  ┌──────────────────────┐ │
-│  │  Apple Music App  │  │  ~/.music-agent/     │ │
-│  │  (local library)  │  │  knowledge.db        │ │
-│  │  via JXA/osascript│  │  (SQLite)            │ │
+│  │  Apple Music      │  │  ~/.music-agent/     │ │
+│  │  MusicKit + REST  │  │  knowledge.db        │ │
+│  │  + Music.app      │  │  (SQLite)            │ │
+│  │  via Aux          │  │                      │ │
 │  └──────────────────┘  └──────────────────────┘ │
 │  ┌──────────────────────────────────────────────┐│
 │  │  MusicBrainz API (external, rate-limited)    ││
@@ -162,41 +202,35 @@ The SQLite database at `~/.music-agent/knowledge.db` contains:
 
 ---
 
-## Current State (v0)
+## Current State
 
-The plugin is built and packaged. 27 files, ~1800 lines. Everything needed for a working v0:
+### Aux (complete)
 
-**Functional:**
-- Full Apple Music library access via 7 JXA scripts (now playing, search, playback, playlists, export, annotations, play-by-ID)
+The foundation is built and tested. 88 commands across 9 groups, 466 tests, 7 live service implementations, SwiftUI auth GUI, CLI installer. Strict TDD — every line of production code was preceded by a failing test. The `aux` binary runs, outputs structured JSON, and covers the full surface area of MusicKit, the Apple Music REST API, and Music.app's AppleScript interface.
+
+### music-agent plugin (v0 — functional prototype)
+
+The Claude Code plugin is built and packaged (27 files, ~1800 lines). The v0 uses JXA scripts for Apple Music access — a pragmatic choice that validates the experience without requiring Aux installation. JXA covers ~70% of what Aux can do (local library access, playback, playlists, metadata, annotations) but lacks cloud catalog search, subscription management, recommendations, charts, and authenticated REST API calls.
+
+**What's functional in v0:**
+- Full Apple Music library access via 7 JXA scripts
 - MusicBrainz lookup for artists, releases, recordings, labels, credits, and discographies
 - Knowledge graph with full CRUD, session logging, caching, and search
-- 6 slash commands covering the core workflows
+- 6 slash commands covering the core workflows (/now, /dig, /queue, /who, /taste, /kb)
 - 4 fully defined personas with distinct search strategies, scoring biases, and anti-patterns
 - 2 subagents (crate-digger, historian) for delegated research
 - Session-start hook for context injection
 - Setup script for one-command installation
 
-**Not yet built (future iterations):**
-- Discogs integration (marketplace data, format info, richer credit data)
-- Bandcamp integration (independent label graph, tag-based discovery)
-- LanceDB vector embeddings for hybrid semantic + structured search
-- Additional subagents for harmonic-dj and anti-bubble personas
-- Local Apple Music Library XML/SQLite reader for historical data beyond what JXA exposes
-- MCP server wrapping for consumption by clients beyond Claude Code
-- Release monitoring / personal A&R agent
-- Taste profile evolution tracking over time
+### Evolution Path
 
----
+**v0 (built):** Claude Code plugin + JXA scripts + Python + SQLite. Validates the experience. Works today on any Mac with Apple Music and Python 3.
 
-## The Vision, Longer Term
+**v1 (ready to integrate):** Replace JXA scripts with `aux` CLI calls. The plugin's commands, personas, and knowledge graph stay the same — only the script layer changes from `osascript` to `aux`. This unlocks the full power of MusicKit: cloud catalog search across Apple Music's entire library, personalized recommendations, charts, recently played, ratings management, and authenticated REST API operations. The three-layer architecture of Aux means every capability of Apple Music becomes available to the agent.
 
-The unified MCP server is the natural evolution. Instead of exposing raw API surfaces, it composes them into intent-level tools. The agent doesn't call `musicbrainz_search` then `apple_music_catalog_search` then `discogs_release` — it calls `deep_lookup` with an artist name and gets back a unified, richly cross-referenced result. The MCP server does fan-out, deduplication, and entity resolution internally. Personas could be served via MCP prompts and resources to any compatible client.
+**v2 (planned):** MCP server wrapping Aux + MusicBrainz + Discogs + Bandcamp + the knowledge graph. Intent-level tools like `deep_lookup` that do fan-out, deduplication, and entity resolution across all data sources. Personas served via MCP prompts and resources to any compatible client. Any AI — not just Claude Code — can consume the music intelligence layer.
 
-LanceDB (or similar) adds vector search over embeddings alongside structured metadata filtering. Music similarity is multi-dimensional and context-dependent — "similar to Alva Noto" means completely different things depending on whether you mean timbral similarity, label affinity, conceptual approach, era, or collaborative network proximity. Hybrid search handles this naturally.
-
-The local Apple Music Library XML and the newer `Music Library.musiclibrary` SQLite database on modern macOS contain data that no API exposes — complete play history, smart playlist rule definitions, local-to-cloud mapping. An agent that can read this data knows how you've *lived with* your music, not just what's in your collection.
-
-Combined with the persona system, you essentially get a team of specialist music advisors with different expertise who share access to your collection and listening context. That doesn't exist anywhere.
+**v3 (vision):** LanceDB vector embeddings for hybrid semantic + structured search. Every entity gets both a vector embedding and structured metadata. Queries like "semantically similar to this track BUT constrained to releases on independent labels after 2020 that I haven't heard" become natural. Release monitoring as a persistent background agent. Taste profile evolution tracking over time.
 
 ---
 
@@ -214,4 +248,6 @@ The goal is an experience where you open your terminal, say "what's playing?", a
 
 ---
 
-*music-agent v0.1.0 — built in a single conversation, March 15, 2026.*
+*Aux v1.1.0 — 88 commands, 466 tests, built March 16, 2026.*
+*music-agent v0.1.0 — 27 files, ~1800 lines, built March 17, 2026.*
+*Both built in single conversations.*

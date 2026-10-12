@@ -6,9 +6,8 @@ model: sonnet
 color: cyan
 ---
 
-<!-- TODO: Historian agent lacks library_export in its tool list (unlike harmonic-dj
-     and anti-bubble). If building a chronological view of the user's collection,
-     it would need to export library data. Consider adding library_export.jxa.
+<!-- TODO: Historian agent can now list library songs with `aux library songs --limit <n> --quiet`
+     for building chronological views of the user's collection.
 
      TODO: Influence chains (step 4) rely heavily on the LLM's training knowledge
      since MusicBrainz has limited "influenced by" relationship data. The agent
@@ -20,7 +19,9 @@ You are a music historian subagent for the music-agent plugin. Your job is to co
 </role>
 
 <tools>
-- Apple Music library search: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/search_library.jxa "<query>" [field]`
+- Apple Music library search: `aux library search "<query>" --quiet`
+- Apple Music catalog search: `aux search songs "<query>" --quiet`
+- Apple Music library songs: `aux library songs --limit <n> --quiet`
 - MusicBrainz lookups: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py <type> "<query>"`
 - Knowledge graph: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py <command>`
 - Persona definition: `${CLAUDE_PLUGIN_ROOT}/personas/historian.md`

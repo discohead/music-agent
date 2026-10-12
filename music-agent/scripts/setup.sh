@@ -17,6 +17,13 @@ if ! command -v python3 &> /dev/null; then
 fi
 echo "  ✓ $(python3 --version)"
 
+# 0b. Check aux CLI
+if ! command -v aux &> /dev/null; then
+    echo "  ✗ aux not found. Install from https://github.com/jaredmcfarland/aux"
+    exit 1
+fi
+echo "  ✓ aux $(aux --version 2>/dev/null || echo '(version unknown)')"
+
 # 1. Install Python dependencies
 echo ""
 echo "→ Installing Python dependencies..."
@@ -30,10 +37,9 @@ echo "→ Initializing knowledge graph..."
 python3 "$PLUGIN_DIR/scripts/db/db.py" init
 echo "  ✓ Database at ~/.music-agent/knowledge.db"
 
-# 3. Make JXA scripts executable (they're run via osascript, but just in case)
+# 3. Set script permissions
 echo ""
 echo "→ Setting script permissions..."
-chmod +x "$PLUGIN_DIR"/scripts/apple-music/*.jxa 2>/dev/null || true
 chmod +x "$PLUGIN_DIR"/scripts/lookup/*.py 2>/dev/null || true
 chmod +x "$PLUGIN_DIR"/scripts/db/*.py 2>/dev/null || true
 chmod +x "$PLUGIN_DIR"/scripts/graph/*.py 2>/dev/null || true
@@ -43,17 +49,13 @@ echo "  ✓ Permissions set"
 # 4. Test Apple Music connection
 echo ""
 echo "→ Testing Apple Music connection..."
-if command -v osascript &> /dev/null; then
-    RESULT=$(osascript -l JavaScript "$PLUGIN_DIR/scripts/apple-music/now_playing.jxa" 2>/dev/null || echo '{"status":"error"}')
-    STATUS=$(echo "$RESULT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status","unknown"))' 2>/dev/null || echo "unknown")
-    if [ "$STATUS" = "error" ] || [ "$STATUS" = "unknown" ]; then
-        echo "  ⚠ Apple Music not running or not accessible"
-        echo "    Open Apple Music and try again"
-    else
-        echo "  ✓ Apple Music connected (state: $STATUS)"
-    fi
+RESULT=$(aux playback status --quiet 2>/dev/null || echo '{"data":{}}')
+STATUS=$(echo "$RESULT" | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("data",{}).get("state",""); print(s if s else "unknown")' 2>/dev/null || echo "unknown")
+if [ "$STATUS" = "unknown" ]; then
+    echo "  ⚠ Apple Music not running or not accessible"
+    echo "    Open Apple Music and try again"
 else
-    echo "  ⚠ osascript not found — are you on macOS?"
+    echo "  ✓ Apple Music connected (state: $STATUS)"
 fi
 
 # 5. Test MusicBrainz connection

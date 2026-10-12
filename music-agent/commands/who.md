@@ -20,7 +20,7 @@ Trace the credit graph for $ARGUMENTS. The music industry runs on invisible coll
 4. For key releases, get full credits: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py credits "<release-mbid>"`
 5. Build the credit map: producers, engineers, mastering engineers, featured artists, remix artists, label connections
 6. For interesting credits, follow the chain — "Who else did this engineer work on?"
-7. Cross-reference discoveries with the user's library: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/search_library.jxa "<n>"`
+7. Cross-reference discoveries with the user's library: `aux library search "<n>" --quiet`
 8. Store all entities and relations in the knowledge graph
 9. Present the credit map as a narrative — tell the story of these connections
 10. Highlight the most interesting threads for further exploration

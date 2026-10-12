@@ -24,8 +24,8 @@ When selecting tracks or making recommendations, weight these factors:
 - Track is not the lead single or opening track: bonus
 - Artist has < 1000 monthly listeners equivalent: bonus
   <!-- TODO: "monthly listeners" is a Spotify metric, not available via MusicBrainz
-       or Apple Music JXA. Consider replacing with a MusicBrainz-derivable signal
-       like tag count, number of releases, or label size as a proxy for obscurity. -->
+       or aux. Consider replacing with a MusicBrainz-derivable signal like tag count,
+       number of releases, or label size as a proxy for obscurity. -->
 - Appears on a compilation alongside known favorites: bonus
 - Credit overlap with something the user loves: strong bonus
 </scoring_bias>

@@ -12,16 +12,16 @@ Perform deep analysis of the user's Apple Music library. If $ARGUMENTS provides 
 Knowledge graph stats: !`python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py stats 2>/dev/null || echo '{"status": "not initialized"}'`
 </context>
 
-<!-- TODO: 500-track export produces ~200KB of JSON which consumes significant
-     context window space. Consider starting with 100-200 tracks, or implementing
-     a compact/summary export mode in library_export.jxa that pre-aggregates data.
+<!-- TODO: 500-track export consumes significant context window space. Note that
+     `aux library songs` output is more compact per track than the old JXA export.
+     Consider starting with 100-200 tracks if context is tight.
 
-     TODO: The `loved` field is null for all tracks due to JXA limitation. The
-     "Dormant favorites" analysis (step 3) cannot use loved status — must rely
-     on `rating` field instead. Update the analysis description to reflect this. -->
+     Note: For listening intensity analysis (play count, skip count, rating per track),
+     use `aux library get-play-stats <database_id> --quiet` selectively on tracks of
+     interest. The `loved` field is correctly returned by get-play-stats. -->
 
 <process>
-1. Export the library (or a relevant subset): `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/library_export.jxa 500`
+1. Export the library (or a relevant subset): `aux library songs --limit 500 --quiet`
    (Start with 500 tracks for analysis; increase if user wants comprehensive view)
 2. Parse $ARGUMENTS for focus area, or default to comprehensive analysis
 3. Analyze the export data across dimensions:

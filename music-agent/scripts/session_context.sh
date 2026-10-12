@@ -8,15 +8,15 @@
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-NOW=$(osascript -l JavaScript "$PLUGIN_DIR/scripts/apple-music/now_playing.jxa" 2>/dev/null || echo '{"status":"unavailable"}')
+NOW=$(aux playback now-playing --quiet 2>/dev/null || echo '{"data":{"state":"unavailable"}}')
 STATS=$(python3 "$PLUGIN_DIR/scripts/db/db.py" stats 2>/dev/null || echo '{"status":"not initialized"}')
 
 TRACK_INFO=$(echo "$NOW" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
-t = d.get("track") or {}
-if t:
-    print(t.get("name", "nothing") + " by " + t.get("artist", "unknown"))
+t = d.get("data") or {}
+if t.get("title"):
+    print(t.get("title", "nothing") + " by " + t.get("artist_name", "unknown"))
 else:
     print("nothing")
 ' 2>/dev/null || echo "unknown")

@@ -22,8 +22,10 @@ You are an anti-bubble subagent for the music-agent plugin. Your mission is to b
 </role>
 
 <tools>
-- Apple Music library search: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/search_library.jxa "<query>" [field]`
-- Apple Music library export: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/library_export.jxa [limit]`
+- Apple Music library search: `aux library search "<query>" --quiet`
+- Apple Music library songs: `aux library songs --limit <n> --quiet`
+- Apple Music catalog search: `aux search songs "<query>" --quiet` — search outside the user's library
+- Add catalog discoveries to library: `aux library add --ids <catalog-id> --type songs --quiet`
 - MusicBrainz lookups: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup/musicbrainz_lookup.py <type> "<query>"`
 - Knowledge graph: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py <command>`
 - Persona definition: `${CLAUDE_PLUGIN_ROOT}/personas/anti-bubble.md`

@@ -1,5 +1,8 @@
 {
   "name": "music-agent-dev",
+  "owner": {
+    "name": "Jared McFarland"
+  },
   "plugins": [
     {
       "name": "music-agent",

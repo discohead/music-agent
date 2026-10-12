@@ -135,11 +135,14 @@ def search_artist(query, limit=10):
         return {"error": str(e)}
 
 
-def get_release_credits(release_id):
-    """Get release with full credits by Discogs release ID."""
+def get_release_credits(release_id, id_type="release"):
+    """Get release with full credits by Discogs release or master ID."""
     try:
         client = get_client()
-        release = client.release(int(release_id))
+        if id_type == "master":
+            release = client.master(int(release_id)).main_release
+        else:
+            release = client.release(int(release_id))
         return format_release_credits(release)
     except Exception as e:
         return {"error": str(e)}
@@ -189,6 +192,7 @@ def get_artist_releases(artist_id, page=1):
         for r in releases:
             items.append({
                 "id": r.id,
+                "type": r.data.get("type", "release"),
                 "title": getattr(r, "title", ""),
                 "year": getattr(r, "year", None),
             })
@@ -225,7 +229,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        result = fn(query)
+        if lookup_type in ("release", "credits") and len(sys.argv) > 3 and sys.argv[3] == "master":
+            result = fn(sys.argv[2], id_type="master")
+        else:
+            result = fn(query)
     except Exception as e:
         result = {"error": str(e)}
     print(json.dumps(result, indent=2, default=str))

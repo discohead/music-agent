@@ -1,6 +1,6 @@
 {
   "name": "music-agent",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Agentic music companion for Apple Music — research, curate, collect, and explore your music library with AI-powered personas via Claude Code.",
   "author": {
     "name": "Jared"
@@ -11,8 +11,7 @@
     "curation",
     "research",
     "playlists",
-    "jxa",
-    "applescript"
-  ],
-  "dependencies": ["python3", "osascript", "sqlite3", "jq"]
+    "aux",
+    "musickit"
+  ]
 }

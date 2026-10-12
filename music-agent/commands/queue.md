@@ -16,15 +16,16 @@ Build a thoughtful, curated queue of tracks from the user's Apple Music library 
    - Track name → find it, analyze its properties, find similar
    - Mood/concept → translate to searchable attributes (genre, era, energy)
    - Abstract idea → get creative, use knowledge graph associations
-4. Search the user's library: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/search_library.jxa "<terms>"`
+4. Search the user's library: `aux library search "<terms>" --quiet`
 5. Consult the knowledge graph for related entities: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py search "<term>"`
 6. If needed, run MusicBrainz lookups to expand the search space
 7. Select and order tracks with intentionality — consider:
    - Energy arc (don't just shuffle — compose a journey)
    - Variety within coherence (same universe, different rooms)
    - The user's relationship with each track (mix familiar and rediscovered)
-8. If --save flag provided, create playlist: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/playlists.jxa create "<name>" "<description>"`
-   Then add each track: `osascript -l JavaScript ${CLAUDE_PLUGIN_ROOT}/scripts/apple-music/playlists.jxa add "<name>" <databaseID>`
+8. If --save flag provided, create playlist: `aux library create-playlist "<name>" --description "<description>" --quiet` (note: this returns the new playlist's ID in the response)
+   Then add tracks: `aux library add-to-playlist <playlist-id> --track-ids <id1,id2,id3> --quiet` (batch add in a single call using the playlist ID from create)
+   Alternatively, queue tracks directly without creating a playlist: `aux playback play-next --track-id <database_id> --quiet` (play next) or `aux playback add-to-queue --track-id <database_id> --quiet` (append to queue).
 9. Present the queue with brief reasoning for each pick and the overall arc
 10. Log the session: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/db/db.py log-session '<json>'`
 </process>

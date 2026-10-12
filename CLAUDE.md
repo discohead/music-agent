@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-music-agent is a Claude Code plugin that turns the terminal into an agentic music companion for Apple Music. It connects Claude Code to the local Apple Music library (via JXA/osascript), MusicBrainz (via Python), and a local SQLite knowledge graph that accumulates entities, relations, and annotations over time.
+music-agent is a Claude Code plugin that turns the terminal into an agentic music companion for Apple Music. It connects Claude Code to the local Apple Music library via the `aux` CLI (a Swift bridge to MusicKit, REST API, and AppleScript), MusicBrainz and Discogs (via Python), and a local SQLite knowledge graph that accumulates entities, relations, and annotations over time.
 
-This is a **plugin-only architecture** — no servers, no build step. The entire system is text files (markdown commands, personas, agents), shell scripts (JXA for Apple Music, Python for MusicBrainz/SQLite), and a SQLite database at `~/.music-agent/knowledge.db`.
+This is a **plugin-only architecture** — no servers, no build step. The entire system is text files (markdown commands, personas, agents), shell/Python scripts, and a SQLite database at `~/.music-agent/knowledge.db`.
 
 ## Repository Structure
 
@@ -23,24 +23,48 @@ music-agent/                        # The Claude Code plugin
 ├── skills/music-agent/SKILL.md     # Auto-trigger skill for music-related conversations
 ├── hooks/hooks.json                # SessionStart hook → session_context.sh
 ├── scripts/
-│   ├── apple-music/*.jxa           # 7 JXA scripts for Apple Music access
-│   ├── lookup/*.py                 # MusicBrainz API wrapper
+│   ├── apple-music-jxa-v0/         # Archived v0 JXA scripts (replaced by aux CLI)
+│   ├── lookup/*.py                 # MusicBrainz + Discogs API wrappers
 │   ├── db/db.py                    # Knowledge graph CRUD operations
+│   ├── graph/engine.py             # NetworkX graph traversal engine
+│   ├── config.py                   # Configuration management
 │   └── session_context.sh          # SessionStart hook script (playback state + KB stats)
 └── db/schema.sql                   # SQLite schema definition
 ```
 
 ## Key Scripts
 
-### Apple Music (JXA via osascript)
-All return JSON. Run with `osascript -l JavaScript <script>`.
-- `now_playing.jxa` — current track with metadata
-- `search_library.jxa "<query>" [field]` — search library by name/artist/album
-- `play_track.jxa "<persistentID>"` — play by ID
-- `playback.jxa <play|pause|next|prev|status>` — transport control
-- `playlists.jxa <list|create|add> [args]` — playlist CRUD
-- `library_export.jxa [limit]` — export library data
-- `annotate.jxa <persistentID> <comment>` — write to track comment field
+### Apple Music (aux CLI)
+The `aux` CLI (installed at `/usr/local/bin/aux`) bridges Apple Music via MusicKit, REST API, and AppleScript. All output is JSON wrapped in `{"data": ...}`. Always pass `--quiet` to suppress non-JSON output.
+
+**Playback:**
+- `aux playback now-playing --quiet` — current track (title, artist_name, album_title, database_id, state, position_seconds, duration_seconds, year, genre)
+- `aux playback play|pause|stop|next|previous --quiet` — transport control
+- `aux playback play --track-id <database_id> --quiet` — play specific track
+- `aux playback play-next --track-id <database_id> --quiet` — queue as next
+- `aux playback add-to-queue --track-id <database_id> --quiet` — append to queue
+- `aux playback status --quiet` — player state (state, shuffle_mode, repeat_mode, volume)
+
+**Library:**
+- `aux library search "<query>" --quiet` — search local library
+- `aux library songs --limit <n> [--artist "<x>"] --quiet` — list/filter library songs
+- `aux library get-tags <database_id> --quiet` — track metadata (comment, rating, genre)
+- `aux library set-tags <database_id> --fields "comment=text" --quiet` — write metadata
+- `aux library batch-set-tags --track-ids <ids> --fields "comment=text" --quiet` — batch annotate
+- `aux library get-play-stats <database_id> --quiet` — play count, skip count, rating
+- `aux library create-playlist "<name>" --quiet` — create playlist (returns ID)
+- `aux library add-to-playlist <playlist-id> --track-ids <ids> --quiet` — add tracks
+- `aux library list-playlists --quiet` — list playlists
+
+**Catalog & Discovery (new in v1):**
+- `aux search songs|albums|artists "<query>" --quiet` — search full Apple Music catalog
+- `aux catalog charts --types songs --quiet` — top charts
+- `aux recommendations list --quiet` — personalized recommendations
+- `aux recently-played tracks --quiet` — recently played
+- `aux history heavy-rotation --quiet` — heavy rotation
+- `aux library add --ids <catalog-id> --type songs --quiet` — add catalog items to library
+- `aux ratings get|set --type songs <id> --quiet` — star ratings
+- `aux favorites add --type songs <id> --quiet` — add to favorites
 
 ### MusicBrainz (Python)
 ```
@@ -63,6 +87,8 @@ DB location: `~/.music-agent/knowledge.db`. Schema in `db/schema.sql`.
 python3 scripts/lookup/discogs_lookup.py <type> <query|id>
 ```
 Types: `artist`, `release`, `credits`, `label`, `label-releases`, `artist-releases`
+
+`release` and `credits` take a numeric Discogs ID plus an optional `master` argument. Discogs master and release IDs are separate namespaces: `artist-releases` items include a `type` field, and when it is `"master"` you must call `credits <id> master` (which resolves to the main release) — a bare master ID fetches an unrelated record.
 
 Requires `python3-discogs-client` (installed by setup). Auth: `DISCOGS_TOKEN` env var or `~/.music-agent/config.json`.
 
@@ -92,18 +118,19 @@ claude --plugin-dir ./music-agent
 ```bash
 bash music-agent/scripts/setup.sh
 ```
-Installs `musicbrainzngs`, initializes the SQLite DB, sets permissions, and tests Apple Music + MusicBrainz connections.
+Installs Python dependencies, initializes the SQLite DB, verifies `aux` CLI, and tests Apple Music + MusicBrainz connections.
 
-**Requirements:** macOS, Apple Music app running, Python 3, `osascript`, `sqlite3`, `jq`.
+**Requirements:** macOS, Apple Music app running, `aux` CLI (v1.1.0+), Python 3, `sqlite3`, `jq`.
 
 ## Architecture Notes
 
 - **Personas are not tone wrappers** — they define distinct search strategies, scoring biases, and anti-patterns. Each persona in `personas/` has `<search_strategy>`, `<scoring_bias>`, and `<anti_patterns>` sections that change how results are selected and ranked.
 - **Subagents** (`agents/`) are autonomous research delegates with constrained workflows. They read their corresponding persona file, conduct multi-step MusicBrainz lookups, cross-reference against the user's library, and store all discoveries in the knowledge graph.
-- **Commands** (`commands/`) use `${CLAUDE_PLUGIN_ROOT}` to reference scripts. They invoke JXA via `osascript` and Python scripts via `python3`.
-- **The comment field** on Apple Music tracks is used as an in-library annotation layer (tags like `#deep-cut`, `#crate-dig-find`). Written via `annotate.jxa`.
-- **All scripts output JSON** — commands and agents parse this output, never present raw JSON to users.
-- **The SessionStart hook** runs `scripts/session_context.sh`, which calls `now_playing.jxa` and `db.py stats` to inject current playback state and knowledge graph stats into every new conversation.
+- **Commands** (`commands/`) reference `aux` CLI commands for Apple Music access and `${CLAUDE_PLUGIN_ROOT}` for Python scripts.
+- **The comment field** on Apple Music tracks is used as an in-library annotation layer (tags like `#deep-cut`, `#crate-dig-find`). Written via `aux library set-tags`.
+- **All output is JSON** — aux wraps in `{"data": ...}` envelope, Python scripts output raw JSON. Commands and agents parse this output, never present raw JSON to users.
+- **The SessionStart hook** runs `scripts/session_context.sh`, which calls `aux playback now-playing` and `db.py stats` to inject current playback state and knowledge graph stats into every new conversation.
+- **Two ID systems**: `database_id` (integer, for playback/tags/stats) and MusicKit `id` (string, for library/catalog operations). `aux playback now-playing` returns `database_id`; `aux library search` returns MusicKit `id`.
 - **The auto-trigger skill** (`skills/music-agent/SKILL.md`) activates on any music-related conversation, providing tool references and workflow patterns without requiring a slash command.
 
 ## Development Conventions
@@ -117,10 +144,11 @@ Installs `musicbrainzngs`, initializes the SQLite DB, sets permissions, and test
 ## Testing Individual Scripts
 
 ```bash
-# Apple Music — requires Music app running
-osascript -l JavaScript music-agent/scripts/apple-music/now_playing.jxa
-osascript -l JavaScript music-agent/scripts/apple-music/search_library.jxa "Autechre" artist
-osascript -l JavaScript music-agent/scripts/apple-music/playback.jxa status
+# Apple Music via aux — requires Music app running + aux CLI
+aux playback now-playing --quiet | jq
+aux library search "Autechre" --quiet | jq
+aux playback status --quiet | jq
+aux library songs --limit 5 --quiet | jq
 
 # MusicBrainz — requires network + musicbrainzngs
 python3 music-agent/scripts/lookup/musicbrainz_lookup.py artist "Autechre"
@@ -149,4 +177,4 @@ python3 music-agent/scripts/config.py show
 cd music-agent && python3 -m pytest tests/ -v
 ```
 
-All scripts output JSON. Pipe through `jq` for readable output.
+All output is JSON. Pipe through `jq` for readable output.
